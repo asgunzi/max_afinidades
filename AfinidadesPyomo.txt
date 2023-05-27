@@ -1,0 +1,81 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat May 20 17:24:41 2023
+
+@author: ASGUNZI
+"""
+
+
+from pyomo.environ import *
+
+
+import csv
+
+
+#Leitura de dados de afinidade
+afinidades =[]
+
+with open('C:/Analytics/afinidades.CSV', newline='') as csvfile:
+    spamreader = csv.reader(csvfile, delimiter=' ', quotechar='|')
+    for row in spamreader:
+        r = row[0].split(",")
+        afinidades.append(r)
+
+#Sets
+alunos = range(15)
+alunosaux = range(15)
+turmas = range(3)
+
+# Model
+model = ConcreteModel()
+
+# Decision variables
+model.aloc = Var(alunos, turmas, within=Binary)
+
+#aux variables
+model.indicador = Var(alunos, alunosaux, turmas, within=Binary)
+
+# Objective function
+def somaFO(model):
+    return sum(model.indicador[aluno1,aluno2, turma]*int(afinidades[aluno1][aluno2]) for aluno1 in alunos for aluno2 in alunosaux  for turma in turmas) - 1000*sum(model.indicador[aluno1,aluno2, turma] for aluno1 in alunos for aluno2 in alunosaux  for turma in turmas)
+
+model.objective = Objective(rule = somaFO, sense=maximize)
+
+# Constraint: Capacidade turmas
+def capacidadeturmas_rule(model, turma):
+    return sum(model.aloc[aluno,turma] for aluno in alunos) == 5
+
+model.capacidade= Constraint(turmas, rule=capacidadeturmas_rule)
+
+# Constraint: alocar todo mundo
+def alocar_rule(model, aluno):
+    return sum(model.aloc[aluno,turma] for turma in turmas) <= 1
+model.alocartodos= Constraint(alunos, rule=alocar_rule)
+
+# Constraint: indicador de dois alunos na mesma turma
+def indicador_rule(model, aluno1, aluno2, turma):
+    return model.aloc[aluno1,turma] + model.aloc[aluno2,turma] - 1 <= model.indicador[aluno1,aluno2,turma]
+
+model.indicadorafim= Constraint(alunos, alunosaux, turmas, rule=indicador_rule)
+
+
+
+#model.pprint()
+
+# Solve the model
+solver = SolverFactory('cbc')
+solver.solve(model)
+
+
+# Imprime a saída
+print(f"Objective value: {model.objective():.2f}")
+print("Selected items:")
+out =[]
+
+for aluno in alunos:
+    auxlin =[]
+    for turma in turmas:
+        auxlin.append(model.aloc[aluno,turma].value)
+    out.append(auxlin)
+
+print(out)
